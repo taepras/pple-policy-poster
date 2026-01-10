@@ -544,6 +544,21 @@
       </div>
     </div>
 
+    <!-- Policy URL Input -->
+    <div class="info-banner" style="background: #e6fffa; border-bottom: 2px solid #81e6d9; padding: 20px 30px;">
+      <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+        <label style="font-weight: 600; color: #234e52; white-space: nowrap;">📋 Auto-fill from Policy URL:</label>
+        <input type="text" id="policyUrlInput" placeholder="https://election69.peoplesparty.or.th/policy/4/D-1-1-01" 
+          style="flex: 1; min-width: 300px; padding: 10px 15px; border: 2px solid #81e6d9; border-radius: 8px; font-size: 14px;" />
+        <button class="btn-primary" onclick="fetchPolicyData()" style="white-space: nowrap;">
+          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+          </svg>
+          Fetch & Populate
+        </button>
+      </div>
+    </div>
+    
     <!-- Info Banner -->
     <div class="info-banner">
       💡 Click on any text to edit it directly. Your changes are instantly visible!
@@ -617,6 +632,143 @@
     // Store original content for reset
     const originalContent = {};
     let currentImageUrl = '';
+    
+    // Fetch and populate policy data from URL
+    async function fetchPolicyData() {
+      const urlInput = document.getElementById('policyUrlInput');
+      const url = urlInput.value.trim();
+      
+      if (!url) {
+        alert('Please enter a policy URL');
+        return;
+      }
+      
+      // Validate URL format
+      if (!url.includes('election69.peoplesparty.or.th')) {
+        alert('Please enter a valid People\'s Party policy URL');
+        return;
+      }
+      
+      try {
+        // Show loading state
+        const btn = event.target;
+        const originalBtnContent = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading"></span> Fetching...';
+        
+        // Fetch the page content
+        // Note: Due to CORS restrictions, we'll need to use a proxy or handle this differently
+        // For now, we'll try direct fetch, but may need to use a CORS proxy
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch policy page');
+        }
+        
+        const html = await response.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        
+        console.log('Parsing HTML from:', url);
+        
+        // Extract policy data with multiple selector attempts
+        let title = doc.querySelector('h1')?.textContent?.trim() ||
+                   doc.querySelector('.policy-title')?.textContent?.trim() ||
+                   doc.querySelector('[class*="title"]')?.textContent?.trim() ||
+                   doc.querySelector('meta[property="og:title"]')?.getAttribute('content');
+        
+        // Find subtitle - it's the p element under the policy title
+        let subtitle = null;
+        const h1Element = doc.querySelector('h1');
+        if (h1Element) {
+          // Try to find p element as next sibling or in parent container
+          subtitle = h1Element.nextElementSibling?.tagName === 'P' ? h1Element.nextElementSibling.textContent?.trim() : null;
+          
+          // If not found, try parent's next p element
+          if (!subtitle) {
+            const parent = h1Element.parentElement;
+            subtitle = parent?.querySelector('p')?.textContent?.trim();
+          }
+        }
+        
+        // Fallback to general p element search if still not found
+        if (!subtitle) {
+          subtitle = doc.querySelector('h1 + p')?.textContent?.trim() ||
+                    doc.querySelector('article p')?.textContent?.trim() ||
+                    doc.querySelector('meta[property="og:description"]')?.getAttribute('content') ||
+                    doc.querySelector('meta[name="description"]')?.getAttribute('content');
+        }
+        
+        const featuredImage = doc.querySelector('meta[property="og:image"]')?.getAttribute('content') || 
+                             doc.querySelector('meta[name="twitter:image"]')?.getAttribute('content') ||
+                             doc.querySelector('.featured-image img')?.src ||
+                             doc.querySelector('.policy-image img')?.src ||
+                             doc.querySelector('article img')?.src;
+        
+        console.log('Extracted data:', { title, subtitle, featuredImage });
+        
+        // Extract policy number from URL or page
+        const urlParts = url.split('/');
+        const policyId = urlParts[urlParts.length - 1];
+        const policyCategory = urlParts[urlParts.length - 2];
+        
+        // Populate poster fields
+        const titleEl = document.querySelector('.text-main-title');
+        const subtitleEl = document.querySelector('.text-description');
+        
+        if (title) {
+          titleEl.innerHTML = title.replace(/\n/g, '<br>');
+          console.log('Title updated:', title);
+        } else {
+          console.warn('No title found');
+        }
+        
+        if (subtitle) {
+          subtitleEl.innerHTML = subtitle.replace(/\n/g, '<br>');
+          console.log('Subtitle updated:', subtitle);
+        } else {
+          console.warn('No subtitle found');
+        }
+        
+        // Update policy number
+        const policyNumberEl = document.querySelector('.text-policy-number');
+        if (policyId) {
+          policyNumberEl.innerHTML = `นโยบายพรรคประชาชน ${policyCategory}/${policyId}`;
+        }
+        
+        // Update URL in QR code section
+        const qrUrlEl = document.getElementById('qrUrlText');
+        qrUrlEl.textContent = url;
+        updateQRCode();
+        
+        // Load featured image if available
+        if (featuredImage) {
+          const imgUrl = featuredImage.startsWith('http') ? featuredImage : new URL(featuredImage, url).href;
+          document.getElementById('imageUrlInput').value = imgUrl;
+          loadImageFromUrl();
+        }
+        
+        // Restore button state
+        btn.disabled = false;
+        btn.innerHTML = originalBtnContent;
+        
+        alert('✅ Policy data loaded successfully!');
+        
+      } catch (error) {
+        console.error('Error fetching policy data:', error);
+        
+        // Restore button state
+        event.target.disabled = false;
+        event.target.innerHTML = '<svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg> Fetch & Populate';
+        
+        // If CORS error, provide helpful message
+        if (error.message.includes('CORS') || error.message.includes('fetch')) {
+          alert('⚠️ Unable to fetch due to CORS restrictions.\n\nPlease manually copy:\n• Title\n• Subtitle\n• Image URL\n\nOr the page needs to allow cross-origin requests.');
+        } else {
+          alert('❌ Error: ' + error.message);
+        }
+      }
+    }
     
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {
