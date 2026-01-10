@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PPLE Policy Poster Editor - ContentEditable</title>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Anakotmai:wght@300;400;500;700;900&display=swap');
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      /* background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); */
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      max-width: 100%;
+    }
+
+    .toolbar {
+      background: white;
+      padding: 15px 30px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .toolbar h1 {
+      margin: 0;
+      font-size: 24px;
+      color: #2d3748;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .toolbar-buttons {
+      display: flex;
+      gap: 10px;
+    }
+
+    .info-banner {
+      background: #edf2f7;
+      padding: 12px 30px;
+      color: #4a5568;
+      font-size: 14px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .preview-container {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: auto;
+    }
+
+    .preview-wrapper {
+      padding: 20px;
+      /* transform: scale(0.4); */
+    }
+
+    #poster {
+      width: 1200px;
+      height: 1600px;
+      max-width: 100%;
+      position: relative;
+      background-color: #002A47;
+      overflow: hidden;
+      transform-origin: top center;
+      background: url('template/template_bg_only.svg');
+    }
+
+    .background-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+    }
+
+    .background-shape {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 1200px;
+      height: 1193px;
+      overflow: hidden;
+      z-index: 0;
+    }
+
+    .background-shape svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .background-image-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 1200px;
+      height: 1193px;
+      clip-path: polygon(0 0, 100% 0, 100% 67%, 0 100%);
+      mix-blend-mode: multiply;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .background-image-overlay img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      filter: grayscale(100%);
+      opacity: 0.8;
+    }
+
+    .image-upload-control {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: white;
+      padding: 15px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-width: 300px;
+    }
+
+    .image-upload-control label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #4a5568;
+      margin-bottom: 5px;
+    }
+
+    .image-upload-control input[type="text"] {
+      width: 100%;
+      padding: 8px;
+      border: 2px solid #e2e8f0;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+
+    .image-upload-control input[type="text"]:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .image-upload-control input[type="file"] {
+      font-size: 12px;
+    }
+
+    .image-upload-control button {
+      padding: 8px 12px;
+      font-size: 12px;
+    }
+
+    .divider {
+      position: absolute;
+      top: 962px;
+      left: 120px;
+      width: 960px;
+      height: 1px;
+      background: white;
+      z-index: 1;
+    }
+
+    .ballot-boxes {
+      position: absolute;
+      left: 560px;
+      top: 1364px;
+      display: flex;
+      gap: 4px;
+      z-index: 1;
+    }
+
+    .ballot-box {
+      width: 140px;
+      height: 140px;
+      border: 2px solid black;
+      position: relative;
+    }
+
+    .ballot-box.purple {
+      background: #DE9AE7;
+    }
+
+    .ballot-box.white {
+      background: white;
+    }
+
+    .ballot-box.green {
+      background: #6EE18B;
+    }
+
+    .ballot-x {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+    }
+
+    .ballot-x::before,
+    .ballot-x::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 80%;
+      height: 11px;
+      background: black;
+      border-radius: 6px;
+    }
+
+    .ballot-x::before {
+      transform: translate(-50%, -50%) rotate(45deg);
+    }
+
+    .ballot-x::after {
+      transform: translate(-50%, -50%) rotate(-45deg);
+    }
+
+    .ballot-number {
+      position: absolute;
+      font-family: 'Anakotmai', sans-serif;
+      font-size: 84px;
+      font-weight: 900;
+      color: black;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 2;
+    }
+
+    .ballot-checkmark {
+      position: absolute;
+      top: 18px;
+      left: 24px;
+      width: 50px;
+      height: 70px;
+      font-family: 'Anakotmai', sans-serif;
+      font-size: 48px;
+      font-weight: 900;
+      color: black;
+    }
+
+    /* Editable text elements */
+    [contenteditable="true"] {
+      outline: none;
+      cursor: text;
+      transition: background 0.2s;
+    }
+
+    [contenteditable="true"]:hover {
+      background: rgba(102, 126, 234, 0.1);
+    }
+
+    [contenteditable="true"]:focus {
+      background: rgba(102, 126, 234, 0.2);
+      box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.5);
+      border-radius: 4px;
+    }
+
+    .content {
+      position: absolute;
+      top: 140px;
+      left: 120px;
+      right: 120px;
+      z-index: 2;
+      font-family: 'Anakotmai', sans-serif;
+    }
+
+    .policy-title {
+      padding-bottom: 80px;
+      border-bottom: 1px #fff solid;
+      margin-bottom: 80px;
+    }
+
+    .text-policy-number {
+      font-family: 'Anakotmai', sans-serif;
+      font-size: 40px;
+      font-weight: 300;
+      color: white;
+      text-shadow: 0 8px 16px rgba(0, 0, 0, 1);
+      margin-bottom: 24px;
+    }
+
+    .text-main-title {
+      font-size: 96px;
+      font-weight: 900;
+      line-height: 1.2;
+      color: white;
+      text-shadow: 0 8px 16px rgba(0, 0, 0, 1);
+      margin-bottom: 24px;
+    }
+
+    .text-description {
+      font-family: 'Anakotmai', sans-serif;
+      font-size: 48px;
+      font-weight: 500;
+      line-height: 1.33;
+      color: #FF6413;
+      text-shadow: 0 8px 16px rgba(0, 0, 0, 1);
+    }
+
+    .pple-logo {
+      position: absolute;
+      top: 40px;
+      right: 40px;
+      height: 60px;
+      z-index: 5;
+    }
+
+    .qr-group {
+      display: flex;
+      gap: 40px;
+      align-items: start;
+      flex-direction: row;
+    }
+
+    .qr-code {
+      /* position: absolute; */
+      /* left: 120px; */
+      /* top: 1042px; */
+      width: 180px;
+      height: 180px;
+      background: white;
+      z-index: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 10px;
+    }
+
+    .qr-code canvas {
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    .text-qr-title {
+      font-size: 32px;
+      font-weight: 500;
+      color: white;
+    }
+
+    .text-qr-subtitle {
+      font-family: 'Anakotmai', sans-serif;
+      font-size: 32px;
+      font-weight: 500;
+      color: white;
+    }
+
+    .text-qr-url {
+      font-family: 'Anakotmai', sans-serif;
+      font-size: 24px;
+      font-weight: 500;
+      color: #FF6413;
+    }
+
+    .text-vote-date {
+      position: absolute;
+      left: 362px;
+      top: 1380px;
+      font-family: 'Anakotmai', sans-serif;
+      font-size: 40px;
+      font-weight: 500;
+      line-height: 1.2;
+      color: white;
+      text-align: center;
+      z-index: 2;
+      padding: 4px;
+    }
+
+    .text-party-name {
+      position: absolute;
+      left: 288px;
+      top: 1475px;
+      font-family: 'Anakotmai', sans-serif;
+      font-size: 40px;
+      font-weight: 500;
+      color: #FF6413;
+      z-index: 2;
+      padding: 4px;
+    }
+
+    .text-ballot-info1 {
+      position: absolute;
+      left: 576px;
+      top: 1518px;
+      font-family: 'Anakotmai', sans-serif;
+      font-size: 24px;
+      font-weight: 500;
+      color: white;
+      z-index: 2;
+      padding: 4px;
+    }
+
+    .text-ballot-info2 {
+      position: absolute;
+      left: 868px;
+      top: 1518px;
+      font-family: 'Anakotmai', sans-serif;
+      font-size: 24px;
+      font-weight: 500;
+      color: white;
+      z-index: 2;
+      padding: 4px;
+    }
+
+    .text-footer {
+      position: absolute;
+      left: 150px;
+      bottom: 16px;
+      font-family: 'Google Sans', sans-serif;
+      font-size: 16px;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.4);
+      z-index: 2;
+      max-width: 900px;
+      padding: 4px;
+    }
+
+    .btn-primary,
+    .btn-secondary {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-secondary {
+      background: #e2e8f0;
+      color: #4a5568;
+    }
+
+    .btn-secondary:hover {
+      background: #cbd5e0;
+    }
+
+    .icon {
+      width: 20px;
+      height: 20px;
+    }
+
+    .loading {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      border: 3px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @media (max-width: 768px) {
+      .toolbar {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .toolbar-buttons {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <h1>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path
+            d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"
+            fill="currentColor" />
+        </svg>
+        Poster Editor
+      </h1>
+      <div class="toolbar-buttons">
+        <button class="btn-secondary" onclick="resetToOriginal()">
+          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+            </path>
+          </svg>
+          Reset
+        </button>
+        <button class="btn-primary" onclick="exportAsPNG()" id="exportBtn">
+          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+          </svg>
+          Export PNG
+        </button>
+      </div>
+    </div>
+
+    <!-- Info Banner -->
+    <div class="info-banner">
+      💡 Click on any text to edit it directly. Your changes are instantly visible!
+    </div>
+
+    <!-- Poster Preview -->
+    <div class="preview-container">
+      <div class="preview-wrapper">
+        <div id="poster">
+
+          <img src="template/pple_logo.svg" class="pple-logo">
+          <!-- Background -->
+          <div class="background-layer">
+            <div class="background-shape">
+              <svg viewBox="0 0 1200 1193" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M0 0H1200V799L0 1193V0Z" fill="#882F1E"/>
+              </svg>
+            </div>
+            <div class="background-image-overlay" id="imageOverlay">
+              <img id="overlayImage" src="" alt="" style="display: none;">
+            </div>
+          </div>
+
+          <!-- Editable Text Elements -->
+          <div class="content">
+            <div class="policy-title">
+              <div class="text-policy-number" contenteditable="true" data-default="นโยบายพรรคประชาชน 1/200">
+                นโยบายพรรคประชาชน 1/200
+              </div>
+              <div class="text-main-title" contenteditable="true"
+                data-default="สู่สินค้าทะลัก-<br>ตัดราคา-ไม่เป็นธรรม:<br>ปกป้องอุตสาหกรรม<br>และ SMEs ไทย">
+                สู่สินค้าทะลัก-<br>ตัดราคา-ไม่เป็นธรรม:<br>ปกป้องอุตสาหกรรม<br>และ SMEs ไทย
+              </div>
+              <div class="text-description" contenteditable="true"
+                data-default="ใช้ Fast Track สกัดสินค้าทุ่มตลาด<br>ลดเวลาไต่สวน 40% มี AI เฝ้าระวังนำเข้า<br>ตั้งทีมพี่เลี้ยงช่วย SMEs เพื่อธุรกิจไทย">
+                ใช้ Fast Track สกัดสินค้าทุ่มตลาด<br>ลดเวลาไต่สวน 40% มี AI เฝ้าระวังนำเข้า<br>ตั้งทีมพี่เลี้ยงช่วย SMEs
+                เพื่อธุรกิจไทย
+              </div>
+            </div>
+            <div class="qr-group">
+              <div class="qr-code" id="qrCode"></div>
+            <div class="qr-text-group">
+              <div class="text-qr-title" contenteditable="true" data-default="ทำทำไม? ทำอะไร? ทำอย่างไร?">
+                ทำทำไม? ทำอะไร? ทำอย่างไร?
+              </div>
+              <div class="text-qr-subtitle" contenteditable="true" data-default="อ่านรายละเอียดนโยบายนี้ต่อที่นี่">
+                อ่านรายละเอียดนโยบายนี้ต่อที่นี่</div>
+              <div class="text-qr-url" contenteditable="true" id="qrUrlText"
+                data-default="https://election69.peoplesparty.or.th/policy/3/A-1-4"
+                oninput="updateQRCode()">
+                https://election69.peoplesparty.or.th/policy/3/A-1-4</div>
+            </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Image Upload Control -->
+    <div class="image-upload-control">
+      <label>Background Image Overlay</label>
+      <input type="text" id="imageUrlInput" placeholder="Enter image URL" />
+      <button class="btn-secondary" onclick="loadImageFromUrl()">Load URL</button>
+      <label>Or upload file:</label>
+      <input type="file" id="imageFileInput" accept="image/*" onchange="loadImageFromFile(event)" />
+      <button class="btn-secondary" onclick="clearImage()">Clear Image</button>
+    </div>
+  </div>
+
+  <script>
+    // Store original content for reset
+    const originalContent = {};
+    let currentImageUrl = '';
+    
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      // Store original content
+      document.querySelectorAll('[contenteditable="true"]').forEach(el => {
+        originalContent[el.className] = el.innerHTML;
+      });
+      
+      // Generate initial QR code
+      updateQRCode();
+    });
+
+    // Generate/Update QR Code
+    function updateQRCode() {
+      // Check if QRCode library is loaded
+      if (typeof QRCode === 'undefined') {
+        console.log('QRCode library not loaded yet, retrying...');
+        setTimeout(updateQRCode, 100);
+        return;
+      }
+      
+      const urlElement = document.getElementById('qrUrlText');
+      const qrContainer = document.getElementById('qrCode');
+      
+      if (!urlElement || !qrContainer) {
+        return;
+      }
+      
+      // Get the text content (strip HTML tags)
+      let url = urlElement.textContent || urlElement.innerText;
+      url = url.trim();
+      
+      if (!url) {
+        url = 'https://election69.peoplesparty.or.th/policy/3/A-1-4';
+      }
+      
+      // Clear previous QR code
+      qrContainer.innerHTML = '';
+      
+      // Generate new QR code using qrcodejs library
+      new QRCode(qrContainer, {
+        text: url,
+        width: 160,
+        height: 160,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    }
+
+    // Load image from URL
+    function loadImageFromUrl() {
+      const url = document.getElementById('imageUrlInput').value.trim();
+      if (url) {
+        const img = document.getElementById('overlayImage');
+        img.src = url;
+        img.style.display = 'block';
+        currentImageUrl = url;
+      }
+    }
+
+    // Load image from file
+    function loadImageFromFile(event) {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const img = document.getElementById('overlayImage');
+          img.src = e.target.result;
+          img.style.display = 'block';
+          currentImageUrl = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+
+    // Clear image
+    function clearImage() {
+      const img = document.getElementById('overlayImage');
+      img.src = '';
+      img.style.display = 'none';
+      document.getElementById('imageUrlInput').value = '';
+      document.getElementById('imageFileInput').value = '';
+      currentImageUrl = '';
+    }
+
+    // Reset to original
+    function resetToOriginal() {
+      if (confirm('Are you sure you want to reset all changes?')) {
+        document.querySelectorAll('[contenteditable="true"]').forEach(el => {
+          if (originalContent[el.className]) {
+            el.innerHTML = originalContent[el.className];
+          }
+        });
+        // Regenerate QR code after reset
+        updateQRCode();
+      }
+    }
+
+    // Export as PNG using html2canvas
+    async function exportAsPNG() {
+      const button = document.getElementById('exportBtn');
+      const originalContent = button.innerHTML;
+
+      button.disabled = true;
+      button.innerHTML = '<span class="loading"></span> Exporting...';
+
+      try {
+        const poster = document.getElementById('poster');
+
+        // Temporarily disable contenteditable to avoid selection issues
+        const editableElements = poster.querySelectorAll('[contenteditable="true"]');
+        editableElements.forEach(el => {
+          el.setAttribute('contenteditable', 'false');
+          // Remove focus styles
+          el.blur();
+        });
+
+        // Use html2canvas to capture the poster
+        const canvas = await html2canvas(poster, {
+          backgroundColor: null,
+          scale: 2, // Higher quality
+          logging: false,
+          width: 1200,
+          height: 1600,
+          windowWidth: 1200,
+          windowHeight: 1600
+        });
+
+        // Re-enable contenteditable
+        editableElements.forEach(el => {
+          el.setAttribute('contenteditable', 'true');
+        });
+
+        // Convert canvas to blob and download
+        canvas.toBlob((blob) => {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.download = `pple-poster-${Date.now()}.png`;
+          link.href = url;
+          link.click();
+          URL.revokeObjectURL(url);
+
+          button.disabled = false;
+          button.innerHTML = originalContent;
+        });
+      } catch (error) {
+        console.error('Export error:', error);
+        alert('Error exporting PNG: ' + error.message);
+        button.disabled = false;
+        button.innerHTML = originalContent;
+
+        // Make sure to re-enable contenteditable on error
+        const editableElements = document.getElementById('poster').querySelectorAll('[contenteditable="true"]');
+        editableElements.forEach(el => {
+          el.setAttribute('contenteditable', 'true');
+        });
+      }
+    }
+  </script>
+</body>
+
+</html>
