@@ -1279,6 +1279,17 @@
       document.querySelectorAll('[contenteditable="true"]').forEach(el => {
         originalContent[el.className] = el.innerHTML;
         originalFontSizes[el.className] = window.getComputedStyle(el).fontSize;
+        
+        // Add paste event listener to preserve styling
+        el.addEventListener('paste', (e) => {
+          e.preventDefault();
+          
+          // Get plain text from clipboard
+          const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+          
+          // Insert as plain text, preserving line breaks
+          document.execCommand('insertHTML', false, text.replace(/\n/g, '<br>'));
+        });
       });
       
       // Generate initial QR code
