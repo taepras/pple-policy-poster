@@ -729,7 +729,7 @@
     <!-- Toolbar -->
     <div class="toolbar">
       <div>
-        <b>Policy Poster Editor</b> - กดแก้ text บนรูปได้เลย • กด <kbd>j</kbd>/<kbd>k</kbd> เพื่อดูโปสเตอร์ต่อไป/ก่อนหน้า • กด <kbd>Ctrl</kbd>+<kbd>S</kbd> เพื่อบันทึกเป็น PNG
+        <b>Policy Poster Editor</b> - กดแก้ text บนรูปได้เลย • <kbd>j</kbd>/<kbd>k</kbd> ดูโปสเตอร์ • <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>&lt;</kbd>/<kbd>&gt;</kbd>/<kbd>/</kbd> ปรับขนาดฟอนต์ • <kbd>Ctrl</kbd>+<kbd>S</kbd> บันทึก PNG
       </div>
       <div class="toolbar-buttons">
         <button class="btn-secondary" onclick="resetToOriginal()">
@@ -861,10 +861,12 @@
   <script>
     // Store original content for reset
     const originalContent = {};
+    const originalFontSizes = {};
     let currentImageUrl = '';
     let policyUrls = [];
     let currentPolicyUrl = null;
     let currentPolicyIndex = 0;
+    let focusedEditableElement = null;
 
     // Scale poster to fit viewport
     function scalePosterToFit() {
@@ -974,6 +976,23 @@
         return;
       }
       
+      // Font size shortcuts when focused on contenteditable (with Ctrl+Shift modifier)
+      if (e.target.isContentEditable && focusedEditableElement && (e.ctrlKey || e.metaKey) && e.shiftKey) {
+        if (e.key === '>' || e.key === '.') {
+          e.preventDefault();
+          adjustFontSize(focusedEditableElement, 2);
+          return;
+        } else if (e.key === '<' || e.key === ',') {
+          e.preventDefault();
+          adjustFontSize(focusedEditableElement, -2);
+          return;
+        } else if (e.key === '?' || e.key === '/') {
+          e.preventDefault();
+          resetFontSize(focusedEditableElement);
+          return;
+        }
+      }
+      
       // Ignore navigation shortcuts if typing in input field or contenteditable
       if (e.target.tagName === 'INPUT' || e.target.isContentEditable) {
         return;
@@ -988,6 +1007,36 @@
         navigateToPolicy(-1); // Previous
       }
     });
+    
+    // Track focused editable element
+    document.addEventListener('focusin', (e) => {
+      if (e.target.isContentEditable) {
+        focusedEditableElement = e.target;
+      }
+    });
+    
+    document.addEventListener('focusout', (e) => {
+      if (e.target.isContentEditable) {
+        focusedEditableElement = null;
+      }
+    });
+    
+    // Adjust font size
+    function adjustFontSize(element, change) {
+      const currentSize = parseFloat(window.getComputedStyle(element).fontSize);
+      const newSize = Math.max(12, currentSize + change); // Minimum 12px
+      element.style.fontSize = newSize + 'px';
+    }
+    
+    // Reset font size to original
+    function resetFontSize(element) {
+      const className = element.className;
+      if (originalFontSizes[className]) {
+        element.style.fontSize = originalFontSizes[className];
+      } else {
+        element.style.fontSize = '';
+      }
+    }
     
     // Fetch and populate policy data from URL
     async function fetchPolicyData(event) {
@@ -1216,9 +1265,10 @@
     
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {
-      // Store original content
+      // Store original content and font sizes
       document.querySelectorAll('[contenteditable="true"]').forEach(el => {
         originalContent[el.className] = el.innerHTML;
+        originalFontSizes[el.className] = window.getComputedStyle(el).fontSize;
       });
       
       // Generate initial QR code
