@@ -1266,14 +1266,30 @@
       });
     }
 
-    // Load image from URL
-    function loadImageFromUrl() {
+    // Load image from URL (convert to data URL to avoid CORS issues)
+    async function loadImageFromUrl() {
       const url = document.getElementById('imageUrlInput').value.trim();
       if (url) {
-        const img = document.getElementById('overlayImage');
-        img.src = url;
-        img.style.display = 'block';
-        currentImageUrl = url;
+        try {
+          // Convert to data URL to avoid CORS tainting
+          const response = await fetch(url);
+          const blob = await response.blob();
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            const img = document.getElementById('overlayImage');
+            img.src = e.target.result;
+            img.style.display = 'block';
+            currentImageUrl = e.target.result;
+          };
+          reader.readAsDataURL(blob);
+        } catch (error) {
+          console.error('Error loading image:', error);
+          // Fallback to direct URL if fetch fails
+          const img = document.getElementById('overlayImage');
+          img.src = url;
+          img.style.display = 'block';
+          currentImageUrl = url;
+        }
       }
     }
 
@@ -1331,10 +1347,71 @@
 
       try {
         const poster = document.getElementById('poster');
+        const overlayImg = document.getElementById('overlayImage');
 
         // Store current transform and temporarily remove it for export
         const currentTransform = poster.style.transform;
         poster.style.transform = 'none';
+
+        // Store original overlay state
+        const originalOverlayParent = overlayImg.parentElement;
+        
+        // Process overlay image if present
+        let tempCanvasContainer = null;
+        
+        if (overlayImg.style.display !== 'none' && overlayImg.src) {
+          // Wait for image to load
+          await new Promise((resolve) => {
+            if (overlayImg.complete) {
+              resolve();
+            } else {
+              overlayImg.onload = resolve;
+            }
+          });
+          
+          // Create a canvas with the processed overlay (grayscale, clipped, opacity, multiply)
+          const overlayCanvas = document.createElement('canvas');
+          overlayCanvas.width = 1200;
+          overlayCanvas.height = 1193;
+          const octx = overlayCanvas.getContext('2d');
+          
+          // First, draw the background shape to multiply with
+          const backgroundShape = poster.querySelector('.background-shape svg path');
+          if (backgroundShape) {
+            octx.fillStyle = '#882F1E'; // Match the background color
+            octx.beginPath();
+            octx.moveTo(0, 0);
+            octx.lineTo(1200, 0);
+            octx.lineTo(1200, 799);
+            octx.lineTo(0, 1193);
+            octx.closePath();
+            octx.fill();
+          }
+          
+          // Apply clipping path for the overlay
+          octx.beginPath();
+          octx.moveTo(0, 0);
+          octx.lineTo(1200, 0);
+          octx.lineTo(1200, 799); // 67% of 1193
+          octx.lineTo(0, 1193);
+          octx.closePath();
+          octx.clip();
+          
+          // Set multiply blend mode and draw overlay
+          octx.globalCompositeOperation = 'multiply';
+          octx.filter = 'grayscale(100%)';
+          octx.globalAlpha = 0.8;
+          octx.drawImage(overlayImg, 0, 0, 1200, 1193);
+          
+          // Create container for the processed overlay canvas
+          tempCanvasContainer = document.createElement('div');
+          tempCanvasContainer.style.cssText = 'position: absolute; top: 0; left: 0; width: 1200px; height: 1193px; pointer-events: none; z-index: 1;';
+          tempCanvasContainer.appendChild(overlayCanvas);
+          
+          // Hide original overlay and insert processed version
+          originalOverlayParent.style.display = 'none';
+          poster.querySelector('.background-layer').appendChild(tempCanvasContainer);
+        }
 
         // Temporarily disable contenteditable to avoid selection issues
         const editableElements = poster.querySelectorAll('[contenteditable="true"]');
@@ -1352,8 +1429,15 @@
           width: 1200,
           height: 1600,
           windowWidth: 1200,
-          windowHeight: 1600
+          windowHeight: 1600,
+          useCORS: true // Enable CORS for external images
         });
+
+        // Restore overlay
+        if (tempCanvasContainer) {
+          tempCanvasContainer.remove();
+          originalOverlayParent.style.display = '';
+        }
 
         // Restore transform
         poster.style.transform = currentTransform;
