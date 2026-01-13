@@ -751,6 +751,14 @@
           </svg>
           Reset
         </button>
+        <button class="btn-secondary" onclick="clearAllAndRefresh()">
+          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
+            </path>
+          </svg>
+          Clear All
+        </button>
         <button class="btn-primary" onclick="exportAsPNG()" id="exportBtn">
           <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -881,6 +889,69 @@
     let currentPolicyUrl = null;
     let currentPolicyIndex = 0;
     let focusedEditableElement = null;
+    
+    // LocalStorage functions
+    function saveCurrentState() {
+      if (!currentPolicyUrl) return;
+      
+      const state = {
+        textContent: {},
+        fontSizes: {},
+        imageUrl: currentImageUrl,
+        timestamp: Date.now()
+      };
+      
+      // Save all editable text content and font sizes
+      document.querySelectorAll('[contenteditable="true"]').forEach(el => {
+        state.textContent[el.className] = el.innerHTML;
+        state.fontSizes[el.className] = el.style.fontSize || '';
+      });
+      
+      localStorage.setItem(`policy_state_${currentPolicyUrl}`, JSON.stringify(state));
+    }
+    
+    function loadSavedState() {
+      if (!currentPolicyUrl) return false;
+      
+      const savedState = localStorage.getItem(`policy_state_${currentPolicyUrl}`);
+      if (!savedState) return false;
+      
+      try {
+        const state = JSON.parse(savedState);
+        
+        // Restore text content and font sizes
+        document.querySelectorAll('[contenteditable="true"]').forEach(el => {
+          if (state.textContent[el.className]) {
+            el.innerHTML = state.textContent[el.className];
+          }
+          if (state.fontSizes[el.className]) {
+            el.style.fontSize = state.fontSizes[el.className];
+          }
+        });
+        
+        // Restore image
+        if (state.imageUrl) {
+          document.getElementById('imageUrlInput').value = state.imageUrl;
+          const img = document.getElementById('overlayImage');
+          img.src = state.imageUrl;
+          img.style.display = 'block';
+          currentImageUrl = state.imageUrl;
+        } else {
+          document.getElementById('overlayImage').style.display = 'none';
+          currentImageUrl = '';
+        }
+        
+        return true;
+      } catch (error) {
+        console.error('Error loading saved state:', error);
+        return false;
+      }
+    }
+    
+    function clearSavedState() {
+      if (!currentPolicyUrl) return;
+      localStorage.removeItem(`policy_state_${currentPolicyUrl}`);
+    }
 
     // Scale poster to fit viewport
     function scalePosterToFit() {
@@ -952,20 +1023,27 @@
       // Store running number for use in policy number field
       window.currentRunningNumber = runningNumber;
       
-      // Reset font sizes to original
-      document.querySelectorAll('[contenteditable="true"]').forEach(el => {
-        const className = el.className;
-        if (originalFontSizes[className]) {
-          el.style.fontSize = originalFontSizes[className];
-        } else {
-          el.style.fontSize = '';
-        }
-      });
-      
-      // Update URL input and fetch
+      // Update URL input
       document.getElementById('policyUrlInput').value = url;
       currentPolicyUrl = url;
-      fetchPolicyData();
+      
+      // Try to load saved state first, otherwise fetch
+      const hasSavedState = loadSavedState();
+      if (hasSavedState) {
+        console.log('Loaded saved state for:', url);
+        updateQRCode();
+      } else {
+        // Reset font sizes to original before fetching
+        document.querySelectorAll('[contenteditable="true"]').forEach(el => {
+          const className = el.className;
+          if (originalFontSizes[className]) {
+            el.style.fontSize = originalFontSizes[className];
+          } else {
+            el.style.fontSize = '';
+          }
+        });
+        fetchPolicyData();
+      }
     }
     
     // Navigate to next policy
@@ -1136,13 +1214,24 @@
                            doc.querySelector('div[class*="flex"][class*="flex-row"][class*="items-center"]');
         
         if (categoryDiv) {
-          let fullPath = categoryDiv.textContent?.trim() || '';
-          // Remove "นโยบายพรรค" prefix if present
-          fullPath = fullPath.replace(/^นโยบายพรรค\s*/g, '').trim();
+          // Since they use SVG chevrons instead of "/" text, extract text from child elements
+          const textElements = categoryDiv.querySelectorAll('a, span, div');
+          const categories = [];
           
-          // Split by '/' and get only the third item (index 2)
-          const categories = fullPath.split('/').map(c => c.trim()).filter(c => c.length > 0);
-          policyDirectory = categories[1] || categories[categories.length - 1] || '';
+          textElements.forEach(el => {
+            // Skip SVG elements and empty text
+            if (el.tagName !== 'svg' && !el.querySelector('svg')) {
+              const text = el.textContent?.trim();
+              if (text && text.length > 0 && text !== 'นโยบายพรรค') {
+                categories.push(text);
+              }
+            }
+          });
+          
+          console.log('Extracted categories from flex div:', categories);
+          // Get the second item (index 1) after removing "นโยบายพรรค"
+          // This is the third level overall: นโยบายพรรค (removed) / Level2 / Level3 (index 1)
+          policyDirectory = categories[2] || categories[0] || '';
           
           console.log('Found category div (third level):', policyDirectory);
         }
@@ -1163,15 +1252,21 @@
               const items = breadcrumb.querySelectorAll('li, a, span, div');
               const breadcrumbTexts = [];
               items.forEach(item => {
-                const text = item.textContent?.trim();
-                if (text && text !== '/' && text !== '>' && text !== 'หน้าหลัก' && 
-                    text !== 'Home' && !text.match(/^\s*$/) && text.length > 1) {
-                  breadcrumbTexts.push(text);
+                // Skip SVG elements
+                if (item.tagName !== 'svg' && !item.querySelector('svg')) {
+                  const text = item.textContent?.trim();
+                  // Skip separators (no longer "/" but could be empty or whitespace), home links, and "นโยบายพรรค"
+                  if (text && text !== 'หน้าหลัก' && text !== 'Home' && text !== 'นโยบายพรรค' &&
+                      !text.match(/^\s*$/) && text.length > 1) {
+                    breadcrumbTexts.push(text);
+                  }
                 }
               });
-              // Get only the third item (index 2)
+              console.log('Breadcrumb texts found:', breadcrumbTexts);
+              // Get unique texts and extract the second item (index 1) 
+              // This is third level after: นโยบายพรรค (filtered) / Level2 / Level3 (index 1)
               const uniqueTexts = [...new Set(breadcrumbTexts)].filter(t => t.length > 1);
-              policyDirectory = uniqueTexts[2] || uniqueTexts[uniqueTexts.length - 1] || '';
+              policyDirectory = uniqueTexts[1] || uniqueTexts[0] || '';
               if (policyDirectory && policyDirectory.length > 0) {
                 console.log('Found via breadcrumb (third level):', policyDirectory);
                 break;
@@ -1253,6 +1348,9 @@
           loadImageFromUrl();
         }
         
+        // Save initial state after fetching
+        setTimeout(saveCurrentState, 500);
+        
         // Restore button state
         btn.disabled = false;
         btn.innerHTML = originalBtnContent;
@@ -1293,6 +1391,16 @@
           // Insert as plain text, preserving line breaks
           document.execCommand('insertHTML', false, text.replace(/\n/g, '<br>'));
         });
+        
+        // Save state on input
+        el.addEventListener('input', () => {
+          saveCurrentState();
+        });
+      });
+      
+      // Save state when image changes
+      document.getElementById('imageUrlInput').addEventListener('change', () => {
+        setTimeout(saveCurrentState, 100);
       });
       
       // Generate initial QR code
@@ -1354,6 +1462,7 @@
             img.src = e.target.result;
             img.style.display = 'block';
             currentImageUrl = e.target.result;
+            saveCurrentState();
           };
           reader.readAsDataURL(blob);
         } catch (error) {
@@ -1363,6 +1472,7 @@
           img.src = url;
           img.style.display = 'block';
           currentImageUrl = url;
+          saveCurrentState();
         }
       }
     }
@@ -1377,6 +1487,7 @@
           img.src = e.target.result;
           img.style.display = 'block';
           currentImageUrl = e.target.result;
+          saveCurrentState();
         };
         reader.readAsDataURL(file);
       }
@@ -1390,6 +1501,7 @@
       document.getElementById('imageUrlInput').value = '';
       document.getElementById('imageFileInput').value = '';
       currentImageUrl = '';
+      saveCurrentState();
     }
 
     // Toggle image panel visibility
@@ -1398,16 +1510,42 @@
       panel.classList.toggle('hidden');
     }
 
-    // Reset to original
+    // Reset to original fetched data
     function resetToOriginal() {
-      if (confirm('Are you sure you want to reset all changes?')) {
+      if (!currentPolicyUrl) {
+        alert('Please load a policy first');
+        return;
+      }
+      
+      if (confirm('Reset to the original fetched data? This will discard your current edits.')) {
+        // Clear saved state
+        clearSavedState();
+        
+        // Reset font sizes
         document.querySelectorAll('[contenteditable="true"]').forEach(el => {
-          if (originalContent[el.className]) {
-            el.innerHTML = originalContent[el.className];
-          }
+          el.style.fontSize = originalFontSizes[el.className] || '';
         });
-        // Regenerate QR code after reset
-        updateQRCode();
+        
+        // Re-fetch from URL
+        fetchPolicyData();
+      }
+    }
+    
+    // Clear all localStorage and refresh page
+    function clearAllAndRefresh() {
+      if (confirm('Clear all saved edits for ALL policies and refresh the page?')) {
+        // Clear all localStorage items related to policies
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('policy_state_')) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+        
+        // Refresh the page
+        location.reload();
       }
     }
 
